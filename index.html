@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Flappiy Birf - İnekli Flappy Bird</title>
+<style>
+  body {
+    margin: 0;
+    background: #70c5ce;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    font-family: Arial, sans-serif;
+    user-select: none;
+  }
+  canvas {
+    border-radius: 10px;
+    background: linear-gradient(#70c5ce, #9ee0de);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+  }
+  #restartBtn {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #0366d6;
+    border: none;
+    color: white;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    display: none;
+  }
+</style>
+</head>
+<body>
+<button id="restartBtn">Yeniden Başlat</button>
+<canvas id="gameCanvas" width="400" height="600"></canvas>
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const restartBtn = document.getElementById('restartBtn');
+
+let bird;
+let pipes = [];
+let score = 0;
+let highScore = 0;
+let lastSpawn = performance.now();
+let gameState = 'menu'; // menu, playing, gameover
+
+function reset() {
+  bird = { x: 50, y: canvas.height / 2, radius: 20, velocity: 0 };
+  pipes = [];
+  score = 0;
+  lastSpawn = performance.now();
+  restartBtn.style.display = 'none';
+}
+
+function spawnPipe() {
+  const gap = 130;
+  const topHeight = Math.random() * (canvas.height - gap - 40) + 20;
+  pipes.push({ x: canvas.width, y: 0, width: 40, height: topHeight, scored: false });
+  pipes.push({ x: canvas.width, y: topHeight + gap, width: 40, height: canvas.height - topHeight - gap, scored: false });
+}
+
+function update() {
+  if (gameState !== 'playing') return;
+
+  const now = performance.now();
+  if (now - lastSpawn > 1800) {
+    spawnPipe();
+    lastSpawn = now;
+  }
+
+  bird.velocity += 0.5;
+  bird.y += bird.velocity;
+
+  pipes.forEach(pipe => pipe.x -= 2.5);
+
+  pipes = pipes.filter(pipe => pipe.x + pipe.width > 0);
+
+  // Çarpışma kontrolü
+  for (let pipe of pipes) {
+    if (
+      circleRectCollision(bird, pipe)
+    ) {
+      gameOver();
+    }
+  }
+
+  // Zemin ve tavan
+  if (bird.y + bird.radius > canvas.height || bird.y - bird.radius < 0) {
+    gameOver();
+  }
+
+  // Skor arttırma (her boru çifti için sadece bir kere)
+  pipes.forEach(pipe => {
+    if (!pipe.scored && pipe.x + pipe.width < bird.x - bird.radius) {
+      pipe.scored = true;
+      score++;
+      if (score > highScore) highScore = score;
+    }
+  });
+}
+
+function drawCowHead(x, y, r) {
+  // Basit inek kafası çizimi
+  ctx.save();
+  ctx.translate(x, y);
+
+  // Baş - oval
+  ctx.fillStyle = '#fffaf0';
+  ctx.beginPath();
+  ctx.ellipse(0, 0, r * 1.2, r, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Gözler
+  ctx.fillStyle = '#333';
+  ctx.beginPath();
+  ctx.arc(-r / 3, -r / 4, r / 6, 0, Math.PI * 2);
+  ctx.arc(r / 3, -r / 4, r / 6, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Burun
+  ctx.fillStyle = '#faa';
+  ctx.beginPath();
+  ctx.ellipse(0, r / 4, r / 2, r / 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Burun delikleri
+  ctx.fillStyle = '#a44';
+  ctx.beginPath();
+  ctx.arc(-r / 6, r / 4, r / 12, 0, Math.PI * 2);
+  ctx.arc(r / 6, r / 4, r / 12, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Kulaklar
+  ctx.fillStyle = '#fffaf0';
+  ctx.beginPath();
+  ctx.ellipse(-r * 1.3, -r / 1.8, r / 3, r / 2, Math.PI / 5, 0, Math.PI * 2);
+  ctx.ellipse(r * 1.3, -r / 1.8, r / 3, r / 2, -Math.PI / 5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // İç kulak
+  ctx.fillStyle = '#fbb';
+  ctx.beginPath();
+  ctx.ellipse(-r * 1.25, -r / 1.8, r / 6, r / 3, Math.PI / 5, 0, Math.PI * 2);
+  ctx.ellipse(r * 1.25, -r / 1.8, r / 6, r / 3, -Math.PI / 5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Borular
+  ctx.fillStyle = '#2ea44f';
+  pipes.forEach(pipe => {
+    ctx.fillRect(pipe.x, pipe.y, pipe.width, pipe.height);
+  });
+
+  // Zemin
+  ctx.fillStyle = '#DEB887';
+  ctx.fillRect(0, canvas.height - 60, canvas.width, 60);
+
+  // İnek kafası (bird yerine)
+  drawCowHead(bird.x, bird.y, bird.radius);
+
+  // Skor
+  ctx.fillStyle = '#083344';
+  ctx.font = '24px Arial';
+  ctx.fillText(`Skor: ${score}`, 10, 30);
+  ctx.fillText(`Rekor: ${highScore}`, 10, 60);
+
+  if (gameState === 'menu') {
+    ctx.fillStyle = '#0366d6';
+    ctx.font = '32px Arial';
+    ctx.fillText('Tıkla veya Space ile Başla', 60, canvas.height / 2);
+  }
+
+  if (gameState === 'gameover') {
+    ctx.fillStyle = 'red';
+    ctx.font = '36px Arial';
+    ctx.fillText('Oyun Bitti!', 130, canvas.height / 2 - 20);
+    ctx.font = '20px Arial';
+    ctx.fillText('Yeniden başlamak için tıkla veya butona bas', 30, canvas.height / 2 + 20);
+  }
+}
+
+function gameOver() {
+  gameState = 'gameover';
+  restartBtn.style.display = 'block';
+}
+
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// Basit daire- dikdörtgen çarpışma kontrolü
+function circleRectCollision(circle, rect) {
+  const cx = Math.max(rect.x, Math.min(circle.x, rect.x + rect.width));
+  const cy = Math.max(rect.y, Math.min(circle.y, rect.y + rect.height));
+  const dx = circle.x - cx;
+  const dy = circle.y - cy;
+  return (dx * dx + dy * dy) < (circle.radius * circle.radius);
+}
+
+// Kontroller
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space') {
+    if (gameState === 'menu') {
+      reset();
+      gameState = 'playing';
+    } else if (gameState === 'playing') {
+      bird.velocity = -8;
+    } else if (gameState === 'gameover') {
+      reset();
+      gameState = 'playing';
+      restartBtn.style.display = 'none';
+    }
+  }
+});
+
+canvas.addEventListener('click', () => {
+  if (gameState === 'menu') {
+    reset();
+    gameState = 'playing';
+  } else if (gameState === 'playing') {
+    bird.velocity = -8;
+  } else if (gameState === 'gameover') {
+    reset();
+    gameState = 'playing';
+    restartBtn.style.display = 'none';
+  }
+});
+
+restartBtn.addEventListener('click', () => {
+  reset();
+  gameState = 'playing';
+  restartBtn.style.display = 'none';
+});
+
+reset();
+loop();
+</script>
+</body>
+</html>
